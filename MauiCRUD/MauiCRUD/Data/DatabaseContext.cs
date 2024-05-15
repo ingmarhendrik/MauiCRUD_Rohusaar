@@ -7,18 +7,20 @@ using System.Threading.Tasks;
 
 namespace MauiCRUD.Data
 {
-    public class DatabaseContext
+    public class DatabaseContext : IAsyncDisposable
     {
-        private const string DBName = "MyDatabase.db3";
-        private static string DbPath => Path.Combine(FileSystem.AppDataDirectory, DBName);
+        private const string DbName = "MyDatabase.db3";
+        private static string DbPath => Path.Combine(FileSystem.AppDataDirectory, DbName);
+
         private SQLiteAsyncConnection _connection;
         private SQLiteAsyncConnection Database =>
             (_connection ??= new SQLiteAsyncConnection(DbPath,
                 SQLiteOpenFlags.Create | SQLiteOpenFlags.ReadWrite | SQLiteOpenFlags.SharedCache));
+
+
         public async Task<IEnumerable<TTable>> GetAllAsync<TTable>() where TTable : class, new()
         {
             var table = await GetTableAsync<TTable>();
-
             return await table.ToListAsync();
         }
 
@@ -41,27 +43,33 @@ namespace MauiCRUD.Data
 
         public async Task<TTable> GetItemByKeyAsync<TTable>(object primaryKey) where TTable : class, new()
         {
+
             return await Execute<TTable, TTable>(async () => await Database.GetAsync<TTable>(primaryKey));
         }
 
         public async Task<bool> AddItemAsync<TTable>(TTable item) where TTable : class, new()
         {
             return await Execute<TTable, bool>(async () => await Database.InsertAsync(item) > 0);
-
         }
-        
+
         public async Task<bool> UpdateItemAsync<TTable>(TTable item) where TTable : class, new()
         {
             await CreateTableIfNotExists<TTable>();
             return await Database.UpdateAsync(item) > 0;
-
         }
-        public async Task<bool>DeleteItemAsync<TTable>(object primaryKey) where TTable : class, new()
+
+        public async Task<bool> DeleteItemAsync<TTable>(TTable item) where TTable : class, new()
         {
             await CreateTableIfNotExists<TTable>();
-            return await Database.DeleteAsync(primaryKey) > 0;
-
+            return await Database.DeleteAsync(item) > 0;
         }
-        
+
+        public async Task<bool> DeleteItemByKeyAsync<TTable>(object primaryKey) where TTable : class, new()
+        {
+            await CreateTableIfNotExists<TTable>();
+            return await Database.DeleteAsync<TTable>(primaryKey) > 0;
+        }
+
+        public async ValueTask DisposeAsync() => await _connection?.CloseAsync();
     }
 }

@@ -1,4 +1,5 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using MauiCRUD.Data;
 using MauiCRUD.Models;
 using System.Collections.ObjectModel;
@@ -53,6 +54,7 @@ namespace MauiCRUD.ViewModels
             }
             catch (Exception)
             {
+
                 //throw;
             }
             finally
@@ -61,5 +63,73 @@ namespace MauiCRUD.ViewModels
                 BusyText = "Processing...";
             }
         }
+
+        [ICommand]
+        private void SetOperatingProduct(Product? product) => OperatingProduct = product ?? new();
+
+        [ICommand]
+        private async Task SaveProductAsync()
+        {
+            if (OperatingProduct is null)
+                return;
+
+            var (isValid, errorMessage) = OperatingProduct.Validate();
+            if (!isValid)
+            {
+                await Shell.Current.DisplayAlert("Validation Error", errorMessage, "Ok");
+                return;
+            }
+
+            var busyText = OperatingProduct.Id == 0 ? "Creating product..." : "Updating product...";
+            await ExecuteAsync(async () =>
+            {
+                if (OperatingProduct.Id == 0)
+                {
+                    await _context.AddItemAsync<Product>(OperatingProduct);
+                    Products.Add(OperatingProduct);
+                }
+                else
+                {
+                    if (await _context.UpdateItemAsync<Product>(OperatingProduct))
+                    {
+                        var productCopy = OperatingProduct.Clone();
+
+                        var index = Products.IndexOf(OperatingProduct);
+                        Products.RemoveAt(index);
+
+                        Products.Insert(index, productCopy);
+                    }
+                    else
+                    {
+                        await Shell.Current.DisplayAlert("Error", "Product updating error", "Ok");
+                        return;
+                    }
+                }
+                SetOperatingProductCommand.Execute(new());
+            }, busyText);
+        }
+
+
+        [ICommand]
+        private async Task DeleteProductAsync(int id)
+        {
+            await ExecuteAsync(async () =>
+            {
+                if (await _context.DeleteItemByKeyAsync<Product>(id))
+                {
+                    var product = Products.FirstOrDefault(p => p.Id == id);
+                    Products.Remove(product);
+                }
+                else
+                {
+                    await Shell.Current.DisplayAlert("Delete Error", "Product was not deleted", "Ok");
+                }
+            }, "Deleting product...");
+        }
+
+
+
+
+
     }
 }
